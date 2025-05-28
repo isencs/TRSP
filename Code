@@ -1,0 +1,564 @@
+from gurobipy import *
+
+#Data
+technicians = list(range(1, 4)) # Define the set of technicians (1,2,...t) t = 3 here
+tasks = list(range(1, 39))  # Define the set of tasks (1,2,...,i) i = 38 here
+days = list(range(1, 5)) # Define the set of working days (1,2,...,d) d = 4 here
+depot = 'depot' # Depot (\delta)
+locations = [depot] + tasks # All locations including the depot (\mathcal{L})
+
+# Parameters
+# Technician working hours (7:30 - 15:30 + 3 Hours overtime)
+a_prime = 0
+b_prime = 480 + 180
+
+f = {
+    1: 153, 2: 178, 3: 193, 4: 72, 5: 442,
+    6: 22, 7: 300, 8: 64, 9: 183, 10: 68,
+    11: 15, 12: 7, 13: 59, 14: 88, 15: 22,
+    16: 48, 17: 19, 18: 459, 19: 26, 20: 5,
+    21: 37, 22: 63, 23: 145, 24: 17, 25: 48,
+    26: 35, 27: 67, 28: 233, 29: 6, 30: 20,
+    31: 24, 32: 150, 33: 122, 34: 81, 35: 57,
+    36: 44, 37: 96, 38: 182
+}
+
+# Task time windows [a_i,b_i]
+a = {i: 0 for i in tasks}   # Earliest start time for task i
+b = {i: b_prime - f[i] for i in tasks} # Latest start time for task i
+
+# Route Data
+# Define available routes between locations (from, to, travel_time)
+routes = {}
+normal_routes = [('depot', 1, 15), ('depot', 2, 20), ('depot', 3, 27), ('depot', 4, 14), ('depot', 5, 15), ('depot', 6, 25), ('depot', 7, 10), ('depot', 8, 10),  ('depot', 12, 26), ('depot', 13, 6), ('depot', 14, 23), ('depot', 15, 33), ('depot', 16, 32), ('depot', 17, 3), ('depot', 18, 77), ('depot', 19, 30), ('depot', 20, 24), ('depot', 21, 27), ('depot', 22, 32), ('depot', 23, 19), ('depot', 24, 19), ('depot', 25, 18), ('depot', 26, 19), ('depot', 27, 11), ('depot', 30, 4), ('depot', 31, 16), ('depot', 32, 24), ('depot', 33, 30), ('depot', 34, 43), ('depot', 35, 33), ('depot', 36, 9), ('depot', 37, 7), ('depot', 38, 33),
+(1, 2, 11), (1, 3, 22), (1, 4, 11), (1, 5, 17), (1, 6, 20), (1, 7, 13), (1, 8, 23), (1, 12, 15), (1, 13, 16), (1, 14, 25), (1, 15, 29), (1, 16, 28), (1, 17, 16), (1, 18, 77), (1, 19, 30), (1, 20, 23), (1, 21, 27), (1, 22, 27), (1, 23, 15), (1, 24, 14), (1, 25, 19), (1, 26, 20), (1, 27, 9), (1, 30, 17), (1, 31, 15), (1, 32, 14), (1, 33, 19), (1, 34, 31), (1, 35, 32), (1, 36, 25), (1, 37, 13), (1, 38, 32),
+(2, 3, 30), (2, 4, 19), (2, 5, 25), (2, 6, 28), (2, 7, 21), (2, 8, 28), (2, 12, 23), (2, 13, 20), (2, 14, 35), (2, 15, 38), (2, 16, 36), (2, 17, 21), (2, 18, 82), (2, 19, 30), (2, 20, 28), (2, 21, 31), (2, 22, 35), (2, 23, 23), (2, 24, 22), (2, 25, 27), (2, 26, 28), (2, 27, 18), (2, 30, 21), (2, 31, 23), (2, 32, 21), (2, 33, 29), (2, 34, 26), (2, 35, 38), (2, 36, 28), (2, 37, 21), (2, 38, 37),
+(3, 4, 17), (3, 5, 16), (3, 6, 5), (3, 7, 19), (3, 8, 30), (3, 12, 13), (3, 13, 31), (3, 14, 12), (3, 15, 14), (3, 16, 13), (3, 17, 26), (3, 18, 102), (3, 19, 49), (3, 20, 46), (3, 21, 50), (3, 22, 13), (3, 23, 12), (3, 24, 12), (3, 25, 12), (3, 26, 13), (3, 27, 22), (3, 30, 29), (3, 31, 15), (3, 32, 18), (3, 33, 11), (3, 34, 43), (3, 35, 56), (3, 36, 30), (3, 37, 24), (3, 38, 55),
+(4, 5, 7), (4, 6, 16), (4, 7, 5), (4, 8, 16), (4, 12, 15), (4, 13, 18), (4, 14, 15), (4, 15, 26), (4, 16, 25), (4, 17, 12), (4, 18, 83), (4, 19, 38), (4, 20, 32), (4, 21, 35), (4, 22, 25), (4, 23, 11), (4, 24, 9), (4, 25, 8), (4, 26, 9), (4, 27, 7), (4, 30, 16), (4, 31, 5), (4, 32, 13), (4, 33, 20), (4, 34, 40), (4, 35, 41), (4, 36, 16), (4, 37, 9), (4, 38, 41),
+(5, 6, 14), (5, 7, 6), (5, 8, 17), (5, 12, 18), (5, 13, 18), (5, 14, 8), (5, 15, 20), (5, 16, 19), (5, 17, 13), (5, 18, 88), (5, 19, 43), (5, 20, 36), (5, 21, 40), (5, 22, 18), (5, 23, 9), (5, 24, 14), (5, 25, 4), (5, 26, 5), (5, 27, 10), (5, 30, 16), (5, 31, 6), (5, 32, 16), (5, 33, 22), (5, 34, 44), (5, 35, 47), (5, 36, 16), (5, 37, 11), (5, 38, 47),
+(6, 7, 18), (6, 8, 28), (6, 12, 15), (6, 13, 30), (6, 14, 9), (6, 15, 11), (6, 16, 10), (6, 17, 25), (6, 18, 103), (6, 19, 47), (6, 20, 45), (6, 21, 48), (6, 22, 10), (6, 23, 9), (6, 24, 11), (6, 25, 9), (6, 26, 11), (6, 27, 21), (6, 30, 29), (6, 31, 15), (6, 32, 16), (6, 33, 11), (6, 34, 41), (6, 35, 53), (6, 36, 30), (6, 37, 23), (6, 38, 53),
+(7, 8, 12), (7, 12, 17), (7, 13, 13), (7, 14, 14), (7, 15, 27), (7, 16, 27), (7, 17, 8), (7, 18, 84), (7, 19, 37), (7, 20, 32), (7, 21, 37), (7, 22, 26), (7, 23, 12), (7, 24, 11), (7, 25, 9), (7, 26, 10), (7, 27, 5), (7, 30, 11), (7, 31, 7), (7, 32, 16), (7, 33, 22), (7, 34, 41), (7, 35, 42), (7, 36, 11), (7, 37, 6), (7, 38, 42),
+(8, 12, 28), (8, 13, 13), (8, 14, 24), (8, 15, 34), (8, 16, 35), (8, 17, 8), (8, 18, 82), (8, 19, 38), (8, 20, 32), (8, 21, 38), (8, 22, 34), (8, 23, 24), (8, 24, 22), (8, 25, 20), (8, 26, 21), (8, 27, 16), (8, 30, 11), (8, 31, 18), (8, 32, 26), (8, 33, 32), (8, 34, 49), (8, 35, 34), (8, 36, 1), (8, 37, 14), (8, 38, 38),
+(9, 28, 10), (9, 29, 17),
+(10, 11, 10),
+(12, 13, 28), (12, 14, 19), (12, 15, 25), (12, 16, 20), (12, 17, 23), (12, 18, 88), (12, 19, 35), (12, 20, 32), (12, 21, 35), (12, 22, 18), (12, 23, 10), (12, 24, 10), (12, 25, 15), (12, 26, 17), (12, 27, 17), (12, 30, 27), (12, 31, 14), (12, 32, 4), (12, 33, 7), (12, 34, 29), (12, 35, 41), (12, 36, 27), (12, 37, 19), (12, 38, 41),
+(13, 14, 25), (13, 15, 36), (13, 16, 35), (13, 17, 7), (13, 18, 77), (13, 19, 32), (13, 20, 25), (13, 21, 28), (13, 22, 35), (13, 23, 22), (13, 24, 23), (13, 25, 21), (13, 26, 22), (13, 27, 14), (13, 30, 3), (13, 31, 19), (13, 32, 26), (13, 33, 33), (13, 34, 43), (13, 35, 34), (13, 36, 12), (13, 37, 11), (13, 38, 33),
+(14, 15, 11), (14, 16, 12), (14, 17, 21), (14, 18, 105), (14, 19, 52), (14, 20, 49), (14, 21, 51), (14, 22, 12), (14, 23, 15), (14, 24, 15), (14, 25, 9), (14, 26, 9), (14, 27, 18), (14, 30, 25), (14, 31, 15), (14, 32, 21), (14, 33, 19), (14, 34, 46), (14, 35, 55), (14, 36, 25), (14, 37, 19), (14, 38, 53),
+(15, 16, 8), (15, 17, 30), (15, 18, 112), (15, 19, 52), (15, 20, 49), (15, 21, 51), (15, 22, 8), (15, 23, 15), (15, 24, 16), (15, 25, 16), (15, 26, 18), (15, 27, 27),  (15, 30, 34), (15, 31, 20), (15, 32, 21), (15, 33, 18), (15, 34, 46), (15, 35, 58), (15, 36, 33), (15, 37, 28), (15, 38, 56),
+(16, 17, 30), (16, 18, 106), (16, 19, 52), (16, 20, 50), (16, 21, 53), (16, 22, 11), (16, 23, 16), (16, 24, 16), (16, 25, 17), (16, 26, 18), (16, 27, 26), (16, 30, 34), (16, 31, 20), (16, 32, 22), (16, 33, 19), (16, 34, 47), (16, 35, 59), (16, 36, 34), (16, 37, 28), (16, 38, 58),
+(17, 18, 82), (17, 19, 35), (17, 20, 28), (17, 21, 31), (17, 22, 30), (17, 23, 17), (17, 24, 17), (17, 25, 16), (17, 26, 17), (17, 27, 11), (17, 30, 8), (17, 31, 14), (17, 32, 22), (17, 33, 29), (17, 34, 46), (17, 35, 37), (17, 36, 7), (17, 37, 9), (17, 38, 36),
+(18, 19, 60), (18, 20, 55), (18, 21, 53), (18, 22, 100), (18, 23, 89), (18, 24, 88), (18, 25, 93), (18, 26, 101), (18, 27, 83), (18, 30, 78), (18, 31, 88), (18, 32, 86), (18, 33, 86), (18, 34, 84), (18, 35, 54), (18, 36, 83), (18, 37, 80), (18, 38, 51),
+(19, 20, 6), (19, 21, 10), (19, 22, 44), (19, 23, 39), (19, 24, 39), (19, 25, 44), (19, 26, 44), (19, 27, 34), (19, 30, 29), (19, 31, 38), (19, 32, 35), (19, 33, 37), (19, 34, 32), (19, 35, 15), (19, 36, 36), (19, 37, 31), (19, 38, 15),
+(20, 21, 4), (20, 22, 42), (20, 23, 35), (20, 24, 35), (20, 25, 40), (20, 26, 40), (20, 27, 30), (20, 30, 25), (20, 31, 35), (20, 32, 33), (20, 33, 35), (20, 34, 31), (20, 35, 10), (20, 36, 32), (20, 37, 27), (20, 38, 9),
+(21, 22, 45), (21, 23, 39), (21, 24, 38), (21, 25, 44), (21, 26, 44), (21, 27, 33), (21, 30, 29), (21, 31, 38), (21, 32, 36), (21, 33, 38), (21, 34, 34), (21, 35, 9), (21, 36, 35), (21, 37, 30), (21, 38, 8),
+(22, 23, 16), (22, 24, 16), (22, 25, 16), (22, 26, 18), (22, 27, 26), (22, 30, 34), (22, 31, 21), (22, 32, 20), (22, 33, 14), (22, 34, 38), (22, 35, 51), (22, 36, 34), (22, 37, 29), (22, 38, 50),
+(23, 24, 3), (23, 25, 6), (23, 26, 8), (23, 27, 13), (23, 30, 21), (23, 31, 7), (23, 32, 10), (23, 33, 15), (23, 34, 38), (23, 35, 45), (23, 36, 21), (23, 37, 15), (23, 38, 45),
+(24, 25, 9), (24, 26, 10), (24, 27, 13), (24, 30, 21), (24, 31, 7), (24, 32, 9), (24, 33, 16), (24, 34, 38), (24, 35, 45), (24, 36, 20), (24, 37, 15), (24, 38, 44),
+(25, 26, 2), (25, 27, 13), (25, 30, 19), (25, 31, 6), (25, 32, 15), (25, 33, 18), (25, 34, 44), (25, 35, 50), (25, 36, 19), (25, 37, 14), (25, 38, 49),
+(26, 27, 14), (26, 30, 21), (26, 31, 8), (26, 32, 17), (26, 33, 19), (26, 34, 45), (26, 35, 50), (26, 36, 20), (26, 37, 15), (26, 38, 50),
+(27, 30, 14), (27, 31, 10), (27, 32, 15), (27, 33, 22), (27, 34, 38), (27, 35, 40), (27, 36, 15), (27, 37, 5), (27, 38, 39),
+(28, 29, 10),
+(30, 31, 18), (30, 32, 26), (30, 33, 33), (30, 34, 42), (30, 35, 34), (30, 36, 11), (30, 37, 9), (30, 38, 34),
+(31, 32, 12), (31, 33, 19), (31, 34, 41), (31, 35, 45), (31, 36, 17), (31, 37, 12), (31, 38, 44),
+(32, 33, 8), (32, 34, 31), (32, 35, 43), (32, 36, 26), (32, 37, 19), (32, 38, 42),
+(33, 34, 34), (33, 35, 46), (33, 36, 33), (33, 37, 26), (33, 38, 45),
+(34, 35, 39), (34, 36, 48), (34, 37, 42), (34, 38, 39),
+(35, 36, 33), (35, 37, 36), (35, 38, 8),
+(36, 37, 14), (36, 38, 38),
+(37, 38, 37)
+]
+
+# Add reverse direction
+c = {}
+for i, j, time in normal_routes:
+    c[(i, j)] = time
+    c[(j, i)] = time 
+
+# Add the penalty 0 to c (normal route so no penalty)
+for (i, j), time in c.items():
+    if i != j:
+        routes[(i, j)] = [(time, 0, 'road')] # (travel_time, penalty, route)
+
+# Alternative routes (from, to, travel_time, penalty, mode)
+alternative_routes = [('depot', 9, 120, 210, 'ferry'), ('depot', 9, 79, 14, 'toll'), ('depot', 10, 82, 14, 'toll'), ('depot', 11, 74, 14, 'toll'), ('depot', 15, 31, 14, 'toll'), ('depot', 28, 112, 210, 'ferry'), ('depot', 28, 70, 14, 'toll'), ('depot', 29, 72, 14, 'toll'), ('depot', 29, 114, 210, 'ferry'),
+(1, 9, 108, 210, 'ferry'), (1, 9, 79, 14, 'toll'), (1, 10, 72, 14, 'toll'), (1, 11, 65, 14, 'toll'), (1, 15, 27, 14, 'toll'), (1, 28, 62, 14, 'toll'), (1, 28, 100, 210, 'ferry'), (1, 29, 63, 14, 'toll'), (1, 29, 102, 210, 'ferry'),
+(2, 9, 71, 14, 'toll'), (2, 9, 103, 210, 'ferry'), (2, 10, 75, 14, 'toll'), (2, 11, 66, 14, 'toll'), (2, 15, 35, 14, 'toll'), (2, 28, 64, 14, 'toll'), (2, 28, 87, 210, 'ferry'), (2, 29, 65, 14, 'toll'), (2, 29, 89, 210, 'ferry'),
+(3, 9, 59, 14, 'toll'), (3, 9, 107, 210, 'ferry'), (3, 10, 66, 14, 'toll'), (3, 11, 59, 14, 'toll'), (3, 15, 12, 14, 'toll'), (3, 28, 53, 14, 'toll'), (3, 28, 101, 210, 'ferry'), (3, 29, 55, 14, 'toll'), (3, 29, 103, 210, 'ferry'),
+(4, 9, 76, 14, 'toll'), (4, 9, 116, 210, 'ferry'), (4, 10, 83, 14, 'toll'), (4, 10, 86, 210, 'ferry'), (4, 11, 75, 14, 'toll'), (4, 15, 24, 14, 'toll'), (4, 28, 70, 14, 'toll'), (4, 28, 109, 210, 'ferry'), (4, 29, 73, 14, 'toll'), (4, 29, 111, 210, 'ferry'),
+(5, 9, 74, 14, 'toll'), (5, 9, 120, 210, 'ferry'), (5, 10, 70, 14, 'toll'), (5, 11, 72, 14, 'toll'), (5, 15, 18, 14, 'toll'), (5, 28, 65, 14, 'toll'), (5, 28, 112, 210, 'ferry'), (5, 29, 66, 14, 'toll'), (5, 29, 114, 210, 'ferry'),
+(6, 9, 56, 14, 'toll'), (6, 9, 106, 210, 'ferry'), (6, 10, 61, 14, 'toll'), (6, 11, 54, 14, 'toll'), (6, 15, 9, 14, 'toll'), (6, 28, 52, 14, 'toll'), (6, 28, 101, 210, 'ferry'), (6, 29, 53, 14, 'toll'), (6, 29, 103, 210, 'ferry'),
+(7, 9, 76, 14, 'toll'), (7, 9, 120, 210, 'ferry'), (7, 10, 84, 14, 'toll'), (7, 11, 75, 14, 'toll'), (7, 15, 24, 14, 'toll'), (7, 28, 61, 14, 'toll'), (7, 28, 112, 210, 'ferry'), (7, 29, 72, 14, 'toll'), (7, 29, 114, 210, 'ferry'),
+(8, 9, 87, 14, 'toll'), (8, 9, 129, 210, 'ferry'), (8, 10, 87, 14, 'toll'), (8, 11, 86, 14, 'toll'), (8, 15, 39, 14, 'toll'), (8, 28, 80, 14, 'toll'), (8, 28, 121, 210, 'ferry'), (8, 29, 81, 14, 'toll'), (8, 29, 123, 210, 'ferry'),
+(9, 10, 77, 14, 'toll'), (9, 10, 148, 210, 'ferry'), (9, 11, 68, 14, 'toll'), (9, 11, 148, 210, 'ferry'), (9, 12, 66, 14, 'toll'), (9, 12, 105, 210, 'ferry'), (9, 13, 89, 14, 'toll'), (9, 13, 121, 210, 'ferry'), (9, 14, 65, 14, 'toll'), (9, 14, 114, 210, 'ferry'), (9, 15, 55, 14, 'toll'), (9, 15, 105, 210, 'ferry'), (9, 16, 62, 14, 'toll'), (9, 16, 111, 210, 'ferry'), (9, 17, 84, 14, 'toll'), (9, 17, 122, 210, 'ferry'), (9, 18, 152, 24, 'toll'), (9, 18, 165, 210, 'ferry'), (9, 19, 92, 14, 'toll'), (9, 19, 112, 210, 'ferry'), (9, 20, 90, 14, 'toll'), (9, 20, 109, 210, 'ferry'), (9, 21, 92, 14, 'toll'), (9, 21, 112, 210, 'ferry'), (9, 22, 57, 14, 'toll'), (9, 22, 103, 210, 'ferry'), (9, 23, 59, 14, 'toll'), (9, 23, 113, 210, 'ferry'), (9, 24, 68, 14, 'toll'), (9, 24, 112, 210, 'ferry'), (9, 25, 68, 14, 'toll'), (9, 25, 113, 210, 'ferry'), (9, 26, 70, 14, 'toll'), (9, 26, 115, 210, 'ferry'), (9, 27, 78, 14, 'toll'), (9, 27, 117, 210, 'ferry'), (9, 30, 83, 14, 'toll'), (9, 30, 121, 210, 'ferry'), (9, 31, 70, 14, 'toll'), (9, 31, 116, 210, 'ferry'), (9, 32, 65, 14, 'toll'), (9, 32, 106, 210, 'ferry'), (9, 33, 55, 14, 'toll'), (9, 33, 92, 210, 'ferry'), (9, 34, 74, 14, 'toll'), (9, 34, 85, 210, 'ferry'), (9, 35, 85, 14, 'toll'), (9, 35, 118, 210, 'ferry'), (9, 36, 78, 14, 'toll'), (9, 36, 127, 210, 'ferry'), (9, 37, 75, 14, 'toll'), (9, 37, 119, 210, 'ferry'), (9, 38, 84, 14, 'toll'), (9, 38, 118, 210, 'ferry'),
+(10, 12, 62, 14, 'toll'), (10, 13, 84, 14, 'toll'), (10, 14, 66, 14, 'toll'), (10, 15, 58, 14, 'toll'), (10, 16, 63, 14, 'toll'), (10, 17, 78, 14, 'toll'), (10, 18, 142, 24, 'toll'), (10, 19, 87, 14, 'toll'), (10, 20, 84, 14, 'toll'), (10, 21, 89, 14, 'toll'), (10, 22, 55, 14, 'toll'), (10, 23, 64, 14, 'toll'), (10, 24, 65, 14, 'toll'), (10, 25, 65, 14, 'toll'), (10, 26, 67, 14, 'toll'), (10, 27, 73, 14, 'toll'), (10, 28, 68, 14, 'toll'), (10, 28, 156, 210, 'ferry'), (10, 29, 69, 14, 'toll'), (10, 29, 163, 210, 'ferry'), (10, 30, 81, 14, 'toll'), (10, 31, 68, 14, 'toll'), (10, 32, 64, 14, 'toll'), (10, 33, 56, 14, 'toll'), (10, 34, 78, 14, 'toll'), (10, 35, 88, 14, 'toll'), (10, 36, 81, 14, 'toll'), (10, 37, 76, 14, 'toll'), (10, 38, 88, 14, 'toll'),
+(11, 12, 56, 14, 'toll'), (11, 13, 66, 14, 'toll'), (11, 14, 57, 14, 'toll'), (11, 15, 49, 14, 'toll'), (11, 16, 56, 14, 'toll'), (11, 17, 69, 14, 'toll'), (11, 18, 131, 14, 'toll'), (11, 19, 73, 14, 'toll'), (11, 20, 71, 14, 'toll'), (11, 21, 74, 14, 'toll'), (11, 22, 47, 14, 'toll'), (11, 23, 56, 14, 'toll'), (11, 24, 56, 14, 'toll'), (11, 25, 57, 14, 'toll'), (11, 26, 59, 14, 'toll'), (11, 27, 66, 14, 'toll'), (11, 28, 158, 210, 'ferry'), (11, 28, 59, 14, 'toll'), (11, 29, 164, 210, 'ferry'), (11, 29, 62, 14, 'toll'), (11, 30, 74, 14, 'toll'), (11, 31, 60, 14, 'toll'), (11, 32, 54, 14, 'toll'), (11, 33, 50, 14, 'toll'), (11, 34, 68, 14, 'toll'), (11, 35, 79, 14, 'toll'), (11, 36, 71, 14, 'toll'), (11, 37, 66, 14, 'toll'), (11, 38, 76, 14, 'toll'),
+(12, 15, 20, 14, 'toll'), (12, 28, 89, 210, 'ferry'), (12, 28, 51, 14, 'toll'), (12, 29, 90, 210, 'ferry'), (12, 29, 53, 14, 'toll'),
+(13, 15, 34, 14, 'toll'), (13, 28, 115, 210, 'ferry'), (13, 28, 74, 14, 'toll'), (13, 29, 116, 210, 'ferry'), (13, 29, 75, 14, 'toll'),
+(14, 15, 13, 14, 'toll'), (14, 28, 106, 210, 'ferry'), (14, 28, 56, 14, 'toll'), (14, 29, 107, 210, 'ferry'), (14, 29, 57, 14, 'toll'),
+(15, 18, 107, 24, 'toll'), (15, 19, 50, 14, 'toll'), (15, 20, 47, 14, 'toll'), (15, 21, 51, 14, 'toll'), (15, 28, 45, 14, 'toll'), (15, 28, 106, 210, 'ferry'), (15, 29, 47, 14, 'toll'), (15, 29, 108, 210, 'ferry'), (15, 34, 45, 14, 'toll'),
+(16, 22, 10, 14, 'toll'), (16, 28, 53, 14, 'toll'), (16, 28, 107, 210, 'ferry'), (16, 29, 54, 14, 'toll'), (16, 29, 108, 210, 'ferry'),
+(17, 28, 59, 14, 'toll'), (17, 28, 119, 210, 'ferry'), (17, 29, 71, 14, 'toll'), (17, 29, 121, 210, 'ferry'),
+(18, 28, 131, 24, 'toll'), (18, 28, 159, 210, 'ferry'), (18, 29, 132, 24, 'toll'), (18, 29, 161, 210, 'ferry'),
+(19, 28, 72, 14, 'toll'), (19, 28, 105, 210, 'ferry'), (19, 29, 73, 14, 'toll'), (19, 29, 107, 210, 'ferry'),
+(20, 28, 70, 14, 'toll'), (20, 28, 103, 210, 'ferry'), (20, 29, 71, 14, 'toll'), (20, 29, 105, 210, 'ferry'),
+(21, 28, 73, 14, 'toll'), (21, 28, 107, 210, 'ferry'), (21, 29, 74, 14, 'toll'), (21, 29, 108, 210, 'ferry'),
+(22, 28, 45, 14, 'toll'), (22, 28, 86, 210, 'ferry'), (22, 29, 46, 14, 'toll'), (22, 29, 88, 210, 'ferry'),
+(23, 28, 55, 14, 'toll'), (23, 28, 106, 210, 'ferry'), (23, 29, 57, 14, 'toll'), (23, 29, 108, 210, 'ferry'),
+(24, 28, 58, 14, 'toll'), (24, 28, 108, 210, 'ferry'), (24, 29, 59, 14, 'toll'), (24, 29, 110, 210, 'ferry'),
+(25, 28, 57, 14, 'toll'), (25, 28, 107, 210, 'ferry'), (25, 29, 59, 14, 'toll'), (25, 29, 109, 210, 'ferry'),
+(26, 28, 59, 14, 'toll'), (26, 28, 109, 210, 'ferry'), (26, 29, 60, 14, 'toll'), (26, 29, 111, 210, 'ferry'),
+(27, 28, 66, 14, 'toll'), (27, 28, 110, 210, 'ferry'), (27, 29, 68, 14, 'toll'), (27, 29, 111, 210, 'ferry'),
+(28, 30, 90, 14, 'toll'), (28, 30, 116, 210, 'ferry'), (28, 31, 76, 14, 'toll'), (28, 31, 118, 210, 'ferry'), (28, 32, 68, 14, 'toll'), (28, 32, 90, 210, 'ferry'), (28, 33, 60, 14, 'toll'), (28, 33, 87, 210, 'ferry'), (28, 34, 85, 14, 'toll'), (28, 34, 78, 210, 'ferry'), (28, 35, 100, 24, 'toll'), (28, 35, 112, 210, 'ferry'), (28, 36, 91, 14, 'toll'), (28, 36, 122, 210, 'ferry'), (28, 37, 85, 14, 'toll'), (28, 37, 115, 210, 'ferry'), (28, 38, 104, 24, 'toll'), (28, 38, 112, 210, 'ferry'),
+(29, 30, 100, 24, 'toll'), (29, 30, 117, 210, 'ferry'), (29, 31, 82, 14, 'toll'), (29, 31, 118, 210, 'ferry'), (29, 32, 75, 14, 'toll'), (29, 32, 101, 210, 'ferry'), (29, 33, 65, 14, 'toll'), (29, 33, 89, 210, 'ferry'), (29, 34, 90, 14, 'toll'), (29, 34, 80, 210, 'ferry'), (29, 35, 108, 24, 'toll'), (29, 35, 114, 210, 'ferry'), (29, 36, 101, 24, 'toll'), (29, 36, 124, 210, 'ferry'), (29, 37, 91, 14, 'toll'), (29, 37, 116, 210, 'ferry'), (29, 38, 108, 24, 'toll'), (29, 38, 114, 210, 'ferry'),
+]
+
+# Makes it possible to have a route without a normal route
+for route_variation in alternative_routes:
+    i, j, travel_time, p, mode = route_variation
+    if (i, j) not in routes:
+        routes[(i, j)] = []
+    routes[(i, j)].append((travel_time, p, mode))
+    if (j, i) not in routes:
+        routes[(j, i)] = []
+    routes[(j, i)].append((travel_time, p, mode))
+
+# Types of tasks
+task_types = {
+    1: 'Repair', 2: 'Repair', 3: 'Repair', 4: 'Pm', 5: 'Repair',
+    6: 'Pm', 7: 'Repair', 8: 'Repair', 9: 'Repair', 10: 'Repair',
+    11: 'Pm', 12: 'Pm', 13: 'Repair', 14: 'Repair', 15: 'Pm',
+    16: 'Repair', 17: 'Pm', 18: 'Repair', 19: 'Pm', 20: 'Pm',
+    21: 'Pm', 22: 'Repair', 23: 'Repair', 24: 'Repair', 25: 'Repair',
+    26: 'Pm', 27: 'Repair', 28: 'Repair', 29: 'Pm', 30: 'Pm',
+    31: 'Pm', 32: 'Repair', 33: 'Repair', 34: 'Repair', 35: 'Repair',
+    36: 'Repair', 37: 'Repair', 38: 'Repair'
+}
+
+# Penalties for not serving tasks
+repair_penalty = 5000
+pm_penalty = 1000
+
+# Assign penalty value to tasks
+task_penalties = {
+    i: repair_penalty
+    if task_types[i] == 'Repair'
+    else pm_penalty
+    for i in tasks}
+
+# Model Creation
+m = Model("TRSP")
+
+# Decision Variables
+
+# x[i, j, r, t, d]: Binary variable. 1 if technician 't' travels from task 'i' to 'j' using route 'r' on day 'd', 0 otherwise.
+x = m.addVars([
+    (i, j, r, t, d)
+    for i in locations
+    for j in locations if i != j
+    for r in range(len(routes.get((i, j))))
+    for t in technicians
+    for d in days],
+    vtype=GRB.BINARY
+)
+
+# y[i]: Binary variable. 1 if task 'i' is unserved, 0 otherwise.
+y = m.addVars([
+    (i)
+    for i in tasks],
+    vtype=GRB.BINARY
+)
+
+# z[i, t, d]: Continuous variable. Start time of service for task 'i' by technician 't' on day 'd'.
+z = m.addVars([
+    (i, t, d)
+    for i in tasks
+    for t in technicians
+    for d in days],
+    vtype=GRB.CONTINUOUS,
+    lb=0.0
+)
+
+# Minimize the objective function
+
+m.setObjective(
+    quicksum((routes[(i, j)][r][0] + routes[(i, j)][r][1]) * x[(i, j, r, t, d)]
+             for t in technicians
+             for i in locations
+             for j in locations if i != j
+             for r in range(len(routes.get((i, j))))
+             for d in days
+             ) + quicksum(task_penalties[i] * y[i]
+                          for i in tasks
+                          ),
+    GRB.MINIMIZE
+)
+
+# Constraints
+
+# Task Assignment: Each task 'i' must either be served by exactly one technician arrival on some day, or be marked as unserved.
+for i in tasks:
+    m.addConstr(
+        quicksum(x[j, i, r, t, d]
+                 for t in technicians
+                 for d in days
+                 for j in locations if i != j
+                 for r in range(len(routes.get((j, i)))))
+        + y[i] == 1 # y[i] >= 1 if we want revisits
+    )
+
+# Depot Departure: Each technician 't' can leave the depot at most once per day 'd'.
+for t in technicians:
+    for d in days:
+        m.addConstr(
+            quicksum(x[depot, i, r, t, d]
+                     for i in tasks
+                     for r in range(len(routes.get((depot, i)))))
+            <= 1
+        )
+
+# Flow Conservation: For each technician 't', day 'd', and task 'i', the number of routes arriving at 'i' must equal the number of routes departing from 'i'.
+for t in technicians:
+    for d in days:
+        for i in tasks:
+            m.addConstr(
+                quicksum(x[j, i, r, t, d]
+                         for j in locations if i != j
+                         for r in range(len(routes.get((j, i))))) # Incoming flow to i
+                -
+                quicksum(x[i, j, r, t, d]
+                         for j in locations if i != j
+                         for r in range(len(routes.get((i, j)))))
+                == 0
+            )
+
+# Depot Return: Each technician 't' can return to the depot at most once per day 'd'.
+for t in technicians:
+    for d in days:
+        m.addConstr(
+            quicksum(x[i, depot, r, t, d]
+                     for i in tasks
+                     for r in range(len(routes.get((i, depot)))))
+            <= 1
+        )
+
+
+# Time Constraints: If technician 't' travels from task 'i' to task 'j' using route 'r' on day 'd', the start time at 'j' (z[j,t,d]) must be feasible. 
+for t in technicians:
+    for i in tasks:
+        for j in tasks:
+            for d in days:
+                if (i, j) not in routes: continue
+                for r in range(len(routes.get((i, j)))):
+                    travel_time_ij, _, _ = routes.get((i, j))[r]
+                    M = b[i] + f[i] + travel_time_ij - a[j]
+                    m.addConstr(
+                        z[i, t, d] + f[i] + travel_time_ij <= z[j, t, d] + M * (1 - x[i, j, r, t, d])
+                    )
+
+# Task Time Window Constraints: The start time z[i,t,d] for task 'i' on day 'd' must be within its time window [a[i], b[i]].
+# Lower bound: z[i,t,d] >= a[i]
+for t in technicians:
+    for d in days:
+        for i in tasks:
+            M_2 = a[i]
+            m.addConstr(
+                z[i, t, d] >= a[i] - M_2 * (1 - quicksum(
+                    x[j, i, r, t, d]
+                    for j in locations if i != j
+                    for r in range(len(routes.get((j, i), [])))))
+            )
+
+# Upper bound: z[i,t,d] <= b[i]
+for t in technicians:
+    for d in days:
+         for i in tasks:
+            M_3 = b_prime - b[i]
+            m.addConstr(
+                z[i, t, d] <= b[i] + M_3 * (1 - quicksum(
+                    x[j, i, r, t, d]
+                    for j in locations if i != j
+                    for r in range(len(routes.get((j, i))))))
+            )
+
+# Depot Departure Time Constraint: If technician 't' travels directly from the depot to task 'i' using route 'r' on day 'd', the start time at 'i' (z[i,t,d]) must be at least the travel time.
+for t in technicians:
+    for d in days:
+        for i in tasks:
+            for r in range(len(routes.get((depot, i)))):
+                travel_time_di, _, _ = routes.get((depot, i))[r]
+                M_4 = a_prime + travel_time_di
+                m.addConstr(
+                    z[i, t, d] >= a_prime + travel_time_di - M * (1 - x[depot, i, r, t, d])
+                 )
+
+# Technician Working Hours (Return to Depot): If technician 't' travels from task 'i' directly back to the depot using route 'r' on day 'd', the arrival time back at the depot (z[i,t,d] + f[i] + travel_time) must not exceed b_prime.
+for t in technicians:
+    for d in days:
+        for i in tasks:
+            for r in range(len(routes.get((i, depot)))):
+                travel_time_id, _, _ = routes.get((i, depot))[r]
+                M_5 = f[i] + travel_time_id - b_prime - b[i]
+                m.addConstr(
+                    z[i, t, d] <= b_prime - f[i] - travel_time_id + M * (1 - x[i, depot, r, t, d])
+                )
+
+# Time limit, because the solver takes a very long time (longest has been over 8 hours)
+m.Params.TimeLimit = 1 * 60 * 60 # 1 hour
+
+# Optimize the model
+m.optimize()
+
+if m.SolCount > 0: # This is to make sure that the model outputs the found solution, even if the solver was interrupted (by the timer)
+    print("Optimization Status: OPTIMAL")
+    print(f"Objective Value: {m.objVal:.2f}")
+
+    total_travel_time_cost = 0
+    total_route_penalty_cost = 0
+    total_unserved_task_penalty = 0
+    num_served_tasks = 0
+    num_unserved_tasks = 0
+
+    print("\nTechnician Schedules")
+    for t_tech in technicians:
+        print(f"\nTechnician {t_tech}:")
+        tech_has_routes = False
+        for d_day in days:
+            daily_route = []
+            current_loc = depot
+            departure_time = a_prime # Tracks the current time for the technician on this day
+            day_active = False
+
+            # Check for departure from the depot
+            for i_task in tasks:
+                if (depot, i_task) in routes:
+                    for r_route_idx, route_details in enumerate(routes[(depot, i_task)]):
+                        var_key = (depot, i_task, r_route_idx, t_tech, d_day)
+                        if var_key in x and x[var_key].X > 0.5: # Technician uses this route from depot
+                            day_active = True
+                            tech_has_routes = True
+                            travel_t, penalty_p, mode_m = route_details
+                            total_travel_time_cost += travel_t
+                            total_route_penalty_cost += penalty_p
+                            arrival_at_task = departure_time + travel_t
+                            service_start_time = z[i_task, t_tech, d_day].X
+                            service_duration = f[i_task]
+                            finish_service_time = service_start_time + service_duration
+
+                            daily_route.append({
+                                "from": depot, "to": i_task, "mode": mode_m,
+                                "travel_time": travel_t, "route_penalty": penalty_p,
+                                "dep_time_from_prev": departure_time, # Departure from depot
+                                "arr_time_at_curr": arrival_at_task, # Arrival at first task
+                                "task_service_start": service_start_time,
+                                "task_service_end": finish_service_time,
+                                "task_duration": service_duration
+                            })
+                            current_loc = i_task
+                            departure_time = finish_service_time # New departure time is after finishing the current task
+                            break # Found departure for this day
+                    if current_loc != depot: break # Move to next part of route building
+
+            # Continue building the route for the day
+            while current_loc != depot and day_active:
+                found_next_leg = False
+                for j_next_loc_val in locations: # j_next_loc can be a task or depot
+                    if current_loc == j_next_loc_val: continue
+                    if (current_loc, j_next_loc_val) in routes:
+                        for r_route_idx, route_details in enumerate(routes[(current_loc, j_next_loc_val)]):
+                            var_key = (current_loc, j_next_loc_val, r_route_idx, t_tech, d_day)
+                            if var_key in x and x[var_key].X > 0.5:
+                                travel_t, penalty_p, mode_m = route_details
+                                total_travel_time_cost += travel_t
+                                total_route_penalty_cost += penalty_p
+                                prev_loc_finish_time = departure_time # This is the finish time from the previous task
+                                arrival_at_next_loc = prev_loc_finish_time + travel_t
+
+                                leg_info = {
+                                    "from": current_loc, "to": j_next_loc_val, "mode": mode_m,
+                                    "travel_time": travel_t, "route_penalty": penalty_p,
+                                    "dep_time_from_prev": prev_loc_finish_time,
+                                    "arr_time_at_curr": arrival_at_next_loc,
+                                }
+
+                                if j_next_loc_val != depot: # If next is a task
+                                    service_start_time = z[j_next_loc_val, t_tech, d_day].X
+                                    service_duration = f[j_next_loc_val]
+                                    finish_service_time = service_start_time + service_duration
+                                    leg_info["task_service_start"] = service_start_time
+                                    leg_info["task_service_end"] = finish_service_time
+                                    leg_info["task_duration"] = service_duration
+                                    departure_time = finish_service_time # Update for next leg
+                                else: # Returning to depot
+                                    departure_time = arrival_at_next_loc # Arrival at the depot is the new "departure" (end of day)
+
+                                daily_route.append(leg_info)
+                                current_loc = j_next_loc_val
+                                found_next_leg = True
+                                break # Found this leg of the route
+                        if found_next_leg: break # Move to find next leg from new current_loc
+                if not found_next_leg and current_loc != depot :
+                    # This case should ideally not happen if flow conservation is correct and the route ends at the depot
+                    print(f"Warning: Route for Tech {t_tech} on Day {d_day} seems incomplete after task {current_loc}.")
+                    break
+                if current_loc == depot and not any(leg['to'] == depot for leg in daily_route):
+                    # Handles cases where a technician might not have returned to the depot explicitly if no tasks were done
+                    # but flow conservation and depot return constraints should manage this.
+                    # This is more of a safeguard for printing.
+                    if not daily_route : day_active = False # No activity
+                    break
+
+
+            if day_active and daily_route:
+                print(f"  Day {d_day}:")
+                # Sort tasks by service start time for logical display (if multiple tasks)
+                # Need to handle depot legs correctly in sorting if we want a full sequence
+                # For simplicity, let's print in the order they were constructed (which should be sequential)
+
+                total_daily_travel = 0
+                total_daily_service = 0
+                total_daily_penalty_route = 0
+                final_arrival_at_depot = a_prime
+
+                # Print Depot Departure
+                if daily_route[0]["from"] == depot:
+                    first_leg = daily_route[0]
+                    print(f"    - Depart {depot} at {first_leg['dep_time_from_prev']:.2f} -> Arrive Task {first_leg['to']} at {first_leg['arr_time_at_curr']:.2f} (Travel: {first_leg['travel_time']:.0f} min, Mode: {first_leg['mode']}, Penalty: {first_leg['route_penalty']})")
+                    print(f"      Serve Task {first_leg['to']} (Type: {task_types.get(first_leg['to'])}, Duration: {f[first_leg['to']]}) from {first_leg['task_service_start']:.2f} to {first_leg['task_service_end']:.2f}")
+                    total_daily_travel += first_leg['travel_time']
+                    total_daily_service += f[first_leg['to']]
+                    total_daily_penalty_route += first_leg['route_penalty']
+                    last_service_end_time = first_leg['task_service_end']
+
+                # Print intermediate tasks
+                for k_idx in range(1, len(daily_route)):
+                    leg = daily_route[k_idx]
+                    prev_leg = daily_route[k_idx-1] # Should be safe due to loop start
+
+                    # Departure from the previous task is its service end time
+                    dep_from_prev_task = prev_leg.get('task_service_end', prev_leg['arr_time_at_curr'])
+
+                    print(f"    - Depart Task {leg['from']} at {dep_from_prev_task:.2f} -> Arrive {'Depot' if leg['to'] == depot else 'Task '+str(leg['to'])} at {leg['arr_time_at_curr']:.2f} (Travel: {leg['travel_time']:.0f} min, Mode: {leg['mode']}, Penalty: {leg['route_penalty']})")
+                    total_daily_travel += leg['travel_time']
+                    total_daily_penalty_route += leg['route_penalty']
+
+                    if leg['to'] != depot:
+                        print(f"      Serve Task {leg['to']} (Type: {task_types.get(leg['to'])}, Duration: {f[leg['to']]}) from {leg['task_service_start']:.2f} to {leg['task_service_end']:.2f}")
+                        total_daily_service += f[leg['to']]
+                        last_service_end_time = leg['task_service_end']
+                    else: # Returning to depot
+                        final_arrival_at_depot = leg['arr_time_at_curr']
+
+
+                print(f"    Summary for Day {d_day}: Total Travel: {total_daily_travel} min, Total Service: {total_daily_service} min, Route Penalties: {total_daily_penalty_route}")
+                if daily_route[-1]['to'] == depot:
+                     print(f"    Arrived back at Depot at: {final_arrival_at_depot:.2f}")
+                elif daily_route : #If a route exists but does not end at depot (should not happen)
+                     print(f"    WARNING: Route does not end at depot. Last known time: {last_service_end_time:.2f}")
+
+
+                print(f"    Working window: {a_prime} to {b_prime}. Day ends at or before {b_prime}.")
+            elif not day_active and not tech_has_routes and d_day == days[-1] and not any(x[curr_loc, next_loc, r_idx, t_tech, d_val].X > 0.5 for curr_loc in locations for next_loc in locations if curr_loc!=next_loc for r_idx in range(len(routes.get((curr_loc,next_loc),[]))) for d_val in days if (curr_loc,next_loc,r_idx,t_tech,d_val) in x ):
+                 pass # Avoid printing "Day X: Idle" for all days if tech is completely idle.
+            elif not day_active:
+                 print(f"  Day {d_day}: Idle")
+
+
+        if not tech_has_routes:
+            print(f"  Technician {t_tech} is idle for all days.")
+
+
+    print("\nUnserved Tasks")
+    unserved_tasks_list = []
+    for i_task in tasks:
+        if y[i_task].X > 0.5:
+            num_unserved_tasks +=1
+            penalty = task_penalties[i_task]
+            total_unserved_task_penalty += penalty
+            unserved_tasks_list.append(f"  Task {i_task} (Type: {task_types.get(i_task)}, Penalty: {penalty})")
+    if unserved_tasks_list:
+        for line in unserved_tasks_list:
+            print(line)
+    else:
+        print("  All tasks were served.")
+
+    num_served_tasks = len(tasks) - num_unserved_tasks
+
+
+    print("\nOverall Summary")
+    print(f"Total Objective Value: {m.objVal:.2f}")
+    print(f"Sum of Travel Times: {total_travel_time_cost:.2f}")
+    print(f"Sum of Route Penalties: {total_route_penalty_cost:.2f}")
+    print(f"Sum of Unserved Task Penalties: {total_unserved_task_penalty:.2f}")
+    print(f"Number of Tasks Served: {num_served_tasks}")
+    print(f"Number of Tasks Unserved: {num_unserved_tasks}")
+
+
+elif m.status == GRB.INFEASIBLE:
+    print("The model is infeasible")
+elif m.status == GRB.UNBOUNDED:
+    print("The model is unbounded")
+else:
+    print(f"Optimization Status: {m.status}")
+
+# For the plots
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
+sns.set(style='whitegrid')
+
+# Data Preparation
+# Create DataFrames for analysis
+task_df = pd.DataFrame.from_dict(f, orient='index', columns=['duration'])
+task_df = task_df.rename_axis('task').reset_index()
+task_df['type'] = task_df['task'].map(task_types)
+
+# Route analysis
+route_data = []
+for (i,j), routes_list in routes.items():
+    for r in routes_list:
+        route_data.append({
+            'from': i,
+            'to': j,
+            'travel_time': r[0],
+            'penalty': r[1],
+            'type': r[2]
+        })
+route_df = pd.DataFrame(route_data)
+
+# Visualization
+# Task Type Distribution
+task_type_counts = task_df['type'].value_counts()
+plt.pie(task_type_counts, labels=task_type_counts.index, autopct='%1.1f%%')
+plt.show()
+
+# Route Type Analysis
+route_type_counts = route_df['type'].value_counts()
+plt.pie(route_type_counts, labels=route_type_counts.index, autopct='%1.1f%%')
+plt.show()
+
+# Route Penalty Analysis
+penalty_routes = route_df[route_df['penalty'] > 0]
+sns.scatterplot(x='travel_time', y='penalty', hue='type', data=penalty_routes)
+plt.xlabel('Travel Time (min)')
+plt.ylabel('Penalty Cost')
+#plt.show()
+
+# Travel Time Comparison by Route Type
+#sns.boxplot(x='type', y='travel_time', data=route_df)
+plt.yscale('log')
+plt.ylabel('Log Travel Time (min)')
+#plt.show()
+
+
+# Task Duration Distribution
+sns.histplot(task_df['duration'], bins=15, kde=True)
+plt.xlabel('Duration (minutes)')
+plt.show()
+
+# Task Duration Comparison by Route Type
+sns.boxplot(x='type', y='duration', data=task_df)
+sns.stripplot(x='type', y='duration', data=task_df, jitter=True, color='black', alpha=0.5)
+plt.xlabel('Task Type')
+plt.ylabel('Duration (minutes)')
+plt.show()
