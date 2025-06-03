@@ -542,13 +542,13 @@ penalty_routes = route_df[route_df['penalty'] > 0]
 sns.scatterplot(x='travel_time', y='penalty', hue='type', data=penalty_routes)
 plt.xlabel('Travel Time (min)')
 plt.ylabel('Penalty Cost')
-#plt.show()
+plt.show()
 
 # Travel Time Comparison by Route Type
-#sns.boxplot(x='type', y='travel_time', data=route_df)
+sns.boxplot(x='type', y='travel_time', data=route_df)
 plt.yscale('log')
 plt.ylabel('Log Travel Time (min)')
-#plt.show()
+plt.show()
 
 
 # Task Duration Distribution
